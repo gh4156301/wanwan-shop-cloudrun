@@ -1,61 +1,29 @@
-const path = require("path");
 const express = require("express");
-const cors = require("cors");
-const morgan = require("morgan");
-const { init: initDB, Counter } = require("./db");
-
-const logger = morgan("tiny");
+const { createProxyMiddleware } = require("http-proxy-middleware");
 
 const app = express();
-app.use(express.urlencoded({ extended: false }));
-app.use(express.json());
-app.use(cors());
-app.use(logger);
 
-// 首页
-app.get("/", async (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
+// 首页健康检查（用于你自己或微信审核）
+app.get("/", (req, res) => {
+  res.send("CloudRun OK");
 });
 
-// 更新计数
-app.post("/api/count", async (req, res) => {
-  const { action } = req.body;
-  if (action === "inc") {
-    await Counter.create();
-  } else if (action === "clear") {
-    await Counter.destroy({
-      truncate: true,
-    });
-  }
-  res.send({
-    code: 0,
-    data: await Counter.count(),
-  });
-});
+// 反向代理：把 /api/** 转到你的后端
+app.use(
+  "/api",
+  createProxyMiddleware({
+    target: "http://103.69.129.124",   // 你的后端
+    changeOrigin: true,
+    xfwd: true,                        // 透传真实IP
+    ws: true,                          // 如需 WebSocket
+    pathRewrite: { "^/api": "/api" },  // 如后端没有 /api 前缀可改成 { "^/api": "" }
+    onProxyReq(proxyReq, req, res) {
+      // 视情况加鉴权头
+      // proxyReq.setHeader("X-From", "wx-cloudrun");
+    }
+  })
+);
 
-// 获取计数
-app.get("/api/count", async (req, res) => {
-  const result = await Counter.count();
-  res.send({
-    code: 0,
-    data: result,
-  });
-});
-
-// 小程序调用，获取微信 Open ID
-app.get("/api/wx_openid", async (req, res) => {
-  if (req.headers["x-wx-source"]) {
-    res.send(req.headers["x-wx-openid"]);
-  }
-});
-
+// 云托管会注入 PORT
 const port = process.env.PORT || 80;
-
-async function bootstrap() {
-  await initDB();
-  app.listen(port, () => {
-    console.log("启动成功", port);
-  });
-}
-
-bootstrap();
+app.listen(port, () => console.log("RUNNING on", port));
