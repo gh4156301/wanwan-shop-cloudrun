@@ -13,8 +13,8 @@ app.use(cors());
 app.use(logger);
 
 // 首页
-app.get("/", (req, res) => {
-  res.send("CloudRun 已连通，后端运行正常。");
+app.get("/", async (req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
 });
 
 // 更新计数
